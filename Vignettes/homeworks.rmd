@@ -1,0 +1,1986 @@
+---
+title: "All homeworks"
+author: "BA23001021 Yulin Zhou"
+date: "2023-11-29"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{All homeworks}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+
+```{r, echo=FALSE}
+library(ggplot2)
+knitr::opts_chunk$set(fig.align = "center", fig.width = 7, fig.height=5)
+```
+
+
+# HW0
+
+# 例一
+
+按照
+$$
+X\sim N(0, 9),
+\\ Y = 2 + 3X + \epsilon,
+\\ \epsilon \sim N(0,4)
+$$
+来生成数据，样本量$n = 100$。
+
+```{r}
+set.seed(123)
+n <- 200
+x <- rnorm(n, mean = 0, sd = 3)
+y <- 2 + 3 * x + rnorm(n, mean = 0, sd = 2)
+plot(x, y)
+```
+
+对数据进行线性拟合，结果如下：
+```{r}
+fit <- lm(y~x)
+summary(fit)
+```
+
+```{r}
+plot(x, y)
+abline(a = fit$coefficients[1], b = fit$coefficients[2])
+```
+
+---
+
+# 例二
+
+从airquality数据集中生成测试表与测试图。
+
+```{r}
+knitr::kable(head(airquality), align = "c", caption = "测试表-airquality")
+```
+
+```{r}
+par(mfrow = c(1,2))
+hist(airquality$Temp)
+hist(airquality$Ozone)
+```
+
+---
+
+# 例三
+按照
+$$
+X\sim U(-2\pi, 2\pi),
+\\Y = \sin(X) + \epsilon,
+\\\epsilon\sim N(0,1)
+$$
+生成数据，样本量$n = 1000$。
+使用LOESS方法对数据进行曲线拟合。
+结果如下：
+```{r}
+library(ggplot2)
+n <- 1000
+x <- runif(n, -2 * pi, 2 * pi)
+y <- sin(x) + rnorm(n, 0, 1)
+
+p <- ggplot(
+  data.frame(x = x, y = y),
+  aes(x, y)) +
+  geom_point() +
+  stat_smooth(
+    formula = y ~ x,
+    method = loess, 
+    aes(colour = "fitted"),
+    linewidth = 1
+    ) +
+  stat_function(
+    fun=sin,
+    aes(colour = "origin"),
+    linewidth = 1
+    ) +
+  guides(colour=guide_legend(title=NULL))
+p
+```
+
+
+
+---
+
+# HW1
+
+
+## 课后习题
+
+利用逆变换法复现replace = TRUE时函数sample的功能。
+
+---
+
+### 解答
+
+**代码实现：**
+```{r}
+my.sample <- function(x, size, prob = NA){
+  
+  #默认概率均分
+  if(length(prob) == 1) if(is.na(prob)){ 
+    prob = rep(1, length(x)) / length(x)
+  }
+  
+  if(
+    sum(prob) != 1 || sum(prob < 0) > 0
+  ) stop("invalid prob")
+  
+  df <- c(0, cumsum(prob))#分布函数
+  u <- runif(size, 0, 1)
+  location <- sapply(u, FUN = df.inv, df)
+  
+  return(x[location])
+}
+
+df.inv <- function(u, df){#分布函数的逆
+  uu <- u < df
+  a <- uu[-1]
+  b <- (!uu)[-length(df)]
+  
+  return(which.max(a * b))
+}
+
+```
+
+**测试：**
+```{r}
+set.seed(123)
+
+x <- c("a", "c", "f", "x", "z")
+size <- 10000
+prob <- c(0.1, 0.3, 0.2, 0.15, 0.25)
+
+y <- my.sample(x, size, prob)
+
+freq <- integer(length(x))
+
+for(i in 1:5){
+  freq[i] <- sum(y == x[i]) / size
+}
+
+print(freq - prob)
+```
+
+**样本频率对比原始频率**
+
+```{r, echo=FALSE}
+dd <- as.data.frame(matrix(NA, nrow = 2 * length(x), ncol = 3))
+
+colnames(dd) <- c("group", "value", "x")
+
+dd$group <- c(rep("prob", length(x)), rep("freq", length(x)))
+dd$value <- c(prob, freq)
+dd$x <- c(x, x)
+
+p <- ggplot(
+  data = dd,
+  aes(x = x, y = value, fill = group)
+  ) +
+  geom_bar(
+    stat = 'identity',
+    colour = 'black',
+    position='dodge'
+  ) + 
+  ggtitle("样本频率与原始频率对比图") +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  guides(fill = guide_legend(title=NULL)) +
+  theme(legend.position = c(0.1, 0.7))
+p
+```
+
+可见my.sample生成样本的频率与prob非常接近。
+
+
+
+---
+
+## Exercise 3.2
+
+标准Laplace分布的密度为$f(x) = \frac{1}{2}e^{-|x|}, x\in\mathbb{R}$。
+使用逆变换法从此分布中生成容量为$1000$的样本，
+并使用本章出现过的一种方法来比较此样本与目标分布。
+
+---
+
+### 解答
+
+$F(x) = \int_0^tf(u)\text{d}u = \frac{1}{2}e^x1_{\{x<0\}} + (1-\frac{1}{2}e^{-x})1_{\{x\geq 0\}}$。
+因此
+$$
+F^{-1}(u) = 
+\left\{
+\begin{aligned}
+&\log(2u), &0<u<1/2
+\\&-\log(2(1-u)). &1/2\leq u < 1
+\end{aligned}
+\right.
+$$
+
+**代码实现**
+
+```{r}
+laplace <- function(size){
+  u <- rbind(runif(size, min = 0, max = 1))
+  
+  x <- integer(length(u))
+  uu <- u < 0.5
+  x[uu] <- log(2 * u[uu])
+  x[!uu] <- -log(2 * (1 - u[!uu]))
+  
+  return(x)
+}
+
+set.seed(123)
+x <- laplace(1000)
+```
+
+**样本频率对比目标密度**
+
+```{r, echo=FALSE}
+dens <- function(x) return(0.5 * exp(-abs(x)))
+
+p <- ggplot(data.frame(x), aes(x = x)) +
+  geom_histogram(
+    aes(y = after_stat(density)),
+    bins = 50,
+    colour = 'black',
+    fill = "gray"
+    ) +
+  stat_function(
+    fun = dens,
+    linewidth = 1
+  ) + 
+  ggtitle("样本频率与目标密度对比图") +
+  theme(plot.title = element_text(hjust = 0.5))
+p
+```
+
+可见样本频率与目标密度非常接近。
+
+**样本累积经验分布对比目标分布**
+
+```{r, echo=FALSE}
+distr <- function(x) return(0.5 * exp(x) * (x < 0) + (1 - 0.5 * exp(-x)) * (x >= 0))
+
+p <- ggplot(data.frame(x), aes(x = x)) +
+  stat_function(
+    fun = distr,
+    aes(color = "target df"),
+    xlim = c(min(x), max(x))
+  )  +
+  stat_ecdf(aes(color = "ecdf"))+ 
+  ggtitle("样本累积经验分布与目标分布对比图") +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  guides(colour = guide_legend(title=NULL)) +
+  theme(legend.position = c(0.8, 0.2))
+p
+```
+
+同样非常接近。
+
+---
+
+## Exercise 3.7
+
+使用接受-拒绝法编写从${\rm Beta}(a,b)$分布中生成样本的函数。
+从${\rm Beta}(2,3)$中生成容量为$1000$的样本，
+画出直方图并对比理论密度。
+
+---
+
+### 解答
+
+${\rm Beta}(a,b)$的密度函数为
+$$
+f(x;a,b) = \frac{1}{{\rm B}(a,b)} x^{a-1}(1-x)^{b-1}1_{[0, 1]}(x).
+$$
+$a,b \geq 1$时，对$x$求导，可知其最大值在$x = \frac{a-1}{a+b-2}$处达到，
+为
+$$
+M(a,b) = \frac{(a-1)^{a-1}(b-1)^{b-1}}{{\rm B}(a,b)(a+b-2)^{a+b-2}}.
+$$
+因此令$g(x) = 1_{[0, 1]}$为$U(0, 1)$的密度函数，$c = M(a,b)$，
+即可使用接受-拒绝法生成样本。
+
+$0 < a < 1$或$0 < b < 1$时，最大值为$\infty$，无法使用接受-拒绝法。
+
+**代码实现**
+
+```{r}
+beta.single <- function(a, b, c){
+  while(TRUE){
+    u <- runif(1, 0, 1)
+    y <- runif(1, 0, 1)
+    if(
+      u <= y^(a-1) * (1-y)^(b-1) / c
+    ) return(y)
+  }
+}
+
+beta.sample <- function(size, a, b){
+  if(a < 1 || b < 1) stop("invalid a or b")
+  
+  c <- (a-1)^(a-1) * (b-1)^(b-1) / (a+b-2)^(a+b-2)
+  x <- sapply(rep(a, size), FUN = beta.single, b, c)
+  
+  return(x)
+}
+
+set.seed(123)
+x <- beta.sample(1000, 3, 2)
+```
+
+**样本频率对比理论密度**
+
+```{r, echo=FALSE}
+dens <- function(x) return(x^2 * (1-x) / beta(3,2))
+
+p <- ggplot(data.frame(x), aes(x = x)) +
+  geom_histogram(
+    aes(y = after_stat(density)),
+    bins = 50,
+    colour = 1,
+    fill = "gray"
+    ) +
+  stat_function(
+    fun = dens,
+    linewidth = 1
+  ) + 
+  ggtitle("样本频率与理论密度对比图") +
+  theme(plot.title = element_text(hjust = 0.5))
+p
+```
+
+两者很接近。
+
+---
+
+## Exercise 3.9
+
+Rescaled Epanechnikov 核
+$$
+f_e(x) = \frac{3}{4}(1-x^2) 1_{[-1, 1]}(x)
+$$
+是密度函数，可以用以下方法生成：
+从$U(-1,1)$生成i.i.d. $U_1,U_2,U_3$。
+若$|U_3|>|U_2|$且$|U_3|>|U_1|$则返回$U_2$，
+否则返回$|U_3|$。
+
+编写函数来生成此分布，并对比样本频率与理论密度。
+
+---
+
+### 解答
+
+**代码实现**
+
+```{r}
+epane <- function(size){
+  U1 <- runif(size, min = -1, max = 1)
+  U2 <- runif(size, min = -1, max = 1)
+  U3 <- runif(size, min = -1, max = 1)
+  
+  uu <- abs(U3) > abs(U1) & abs(U3) > abs(U2)
+  x <- integer(size)
+  x[uu] <- U2[uu]
+  x[!uu] <- U3[!uu]
+}
+
+set.seed(123)
+x <- epane(100000)
+```
+
+**样本频率对比理论密度**
+
+```{r, echo=FALSE}
+dens <- function(x) return(3 * (1-x^2) / 4)
+
+p <- ggplot(data.frame(x), aes(x = x)) +
+  geom_histogram(
+    aes(y = after_stat(density)),
+    bins = 50,
+    colour = 1,
+    fill = "gray"
+    ) +
+  stat_function(
+    fun = dens,
+    linewidth = 1
+  ) + 
+  ggtitle("样本频率与理论密度对比图") +
+  theme(plot.title = element_text(hjust = 0.5))
+p
+```
+
+两者非常接近。
+
+---
+
+## Exercise 3.10
+
+证明3.9中的方法生成的变量就服从$f_e$。
+
+---
+
+### 证明：
+
+3.9中的方法等价于：
+从$U(0,1)$中i.i.d.生成$X_1,X_2,X_3$，随机选出一个不是最大的，记为$Y$；
+令$\delta$为$\{-1, 1\}$的等概率两点分布，与$X_1,X_2,X_3$独立；
+最终输出$X=\delta\cdot Y$。
+
+$\forall x\in [0,1]$，$Y\leq x$可分为两种情况：
+
+(1) $X_1,X_2,X_3$至少有两个$\leq x$。
+概率为$\binom{3}{2}x^2(1-x) + \binom{3}{3}x^3 = 3t^2 - 2t^3$。
+
+(2) $X_1,X_2, X_3$中有且只有一个$\leq x$，且刚好被选到。
+概率为$0.5\cdot\binom{3}{1}x(1-x)^2 = \frac{3}{2}(x^3-2t^2+x)$。
+
+相加即得
+$$
+{\rm P}(Y\leq x) = \frac{3}{2}x - \frac{1}{2}x^3,\\
+f_Y(x) = \frac{3}{2}(1-x^2)1_{[0,1]}(x).
+$$
+从而
+$$
+f_X(x) = \frac{3}{4}(1-x^2) 1_{[-1,1]}(x)=f_e(x).
+$$
+
+---
+
+
+
+# HW2
+
+## 课后习题
+
+在Buffon实验中，使用$\delta$法，找到最小化$\hat\pi$的渐近方差的$\rho = \frac{l}{d}$。
+取三个不同的$\rho$值（包括$\rho_{\rm min}$），使用Monte Carlo法来验证（$n = 10^6$，样本量$K=100$）。
+
+### 解答
+
+设$X_i\sim U(0, d/2), Y_i \sim U(0, \pi/2), i=1,...,m$，且独立。
+令$Z_i = 1_{\{\sin Y_i \geq 2X_i \}}$，
+则$Z_i, i=1,..,m$ i.i.d，且$n = \sum_{i=1}^m Z_i$。
+
+${\rm E}Z_i = \frac{2\rho}{\pi}$，
+${\rm Var}(Z_i) = \frac{2\rho}{\pi} - \left(\frac{2\rho}{\pi}\right)^2$，
+于是
+$$
+{\rm E}\hat p = \frac{2\rho}{\pi},\\
+{\rm Var}(\hat p) = \frac{2\rho}{m\pi} \left(1-\frac{2\rho}{\pi}\right).
+$$
+由$\delta$法，
+
+$$
+{\rm Var}(\sqrt{m} (\hat \pi - \pi)) \approx 4\rho^2 \frac{1}{(2\rho / \pi)^4} \frac{2\rho}{m\pi} \left(1-\frac{2\rho}{\pi}\right) = \frac{\pi^3}{2\rho} - \pi^2,
+$$
+最小值在$\rho = 1$处达到，为$\frac{\pi^3}{2} - \pi^2$。
+
+选取$\rho = 0.2, 0.5, 1$，模拟如下：
+
+```{r}
+set.seed(12345)
+d <- 1; m <- 1e6
+rho <- c(0.2, 0.5, 1)
+
+pihat.var <- integer(0)
+for(rr in rho){
+  l <- d * rr
+  pihat <- integer(0)
+  for(i in 1:100){
+    X <- runif(m,0,d/2)
+    Y <- runif(m,0,pi/2)
+    pihat <- c(pihat, 2*l/d/mean(l/2*sin(Y)>X))
+  }
+  pihat.var <- c(pihat.var, m * var(pihat))
+}
+
+pihat.var
+```
+理论方差：
+```{r}
+pi^3 / 2 / rho - pi^2
+```
+两者下降趋势一致，但具体数值有一定差距。
+
+---
+
+## Exercise 5.6
+
+要使用Monte Carlo法估计$\theta = \int_0^1 e^x{\rm d}x$，可以应用对偶变量法。
+设$U\sim N(0,1)$，计算${\rm Cov}(e^U, e^{1-U})$与${\rm Var}(e^U + e^{1-U})$。
+相比简单MC，使用对偶变量法可以将方差减小多少百分比？
+
+### 解答
+${\rm E}e^U ={\rm E}e^{1-U}= e-1$，${\rm Var}(e^U) = {\rm Var}(e^{1-U}) = \frac{-e^2+4e-3}{2}$，于是
+
+$$
+{\rm Cov}(e^U, e^{1-U}) = \int_0^1 (e^x-e+1) (e^{1-x}-e+1){\rm d}x =  - e^2 + 3e - 1,\\
+{\rm Var}(e^U + e^{1-U}) = 2{\rm Var}(e^U) + 2{\rm Cov}(e^U, e^{1-U}) = -3e^2 + 10e - 5.
+$$
+相比简单MC，使用样本量缩减至一半的对偶变量法，
+方差减小了$\frac{5e^2-16e+7}{-e^2+4e-3} \approx 93.534\%$。
+
+---
+
+## Exercise 5.7
+
+分别使用简单MC与对偶变量法来估计5.6中的$\theta$，并计算样本方差减小的百分比。
+将结果与理论值进行对比。
+
+### 解答
+
+估计$\theta$：
+
+```{r}
+set.seed(123)
+n <- 1e6
+u <- runif(n)
+
+theta.mc <- mean(exp(u))#简单MC
+
+u <- u[1:(n/2)]#对偶变量法
+theta.ant <- mean((exp(u) + exp(1-u)) / 2)
+
+print(c(theta.mc, theta.ant))
+```
+估计方差减少：
+
+```{r}
+set.seed(123)
+n <- 1e6
+
+var.mc <- integer(100)
+var.ant <- integer(100)
+
+for(i in 1:100){
+  u <- runif(n)
+  var.mc[i] <- var(exp(u) / n)#简单MC
+  
+  u <- u[1:(n/2)]#对偶变量法
+  var.ant[i] <- var((exp(u) + exp(1-u)) / n)
+}
+
+mean(1 - var.ant / var.mc)
+```
+与理论值$93.534%$非常接近。
+
+---
+
+
+
+# HW3
+
+
+## 课后习题
+
+在分层采样法中，
+$$
+{\rm Var}(\hat\theta^M) = \frac{1}{Mk}\sum_{i=1}^k \sigma_i^2 + {\rm Var}(\theta_I) = {\rm Var}(\hat\theta^S) + {\rm Var}(\theta_I),
+$$
+其中$\theta_i = {\rm E}(g(U)|I=i)$，$\sigma_i^2 = {\rm Var}(g(U)|I=i)$。
+
+假设$g$在$(a,b)$上连续，
+证明$b_i - a_i\rightarrow 0$时
+${\rm Var}(\hat{\theta}^S)/{\rm Var}(\hat{\theta}^M)\rightarrow 0$。
+
+---
+
+### 证明
+
+由条件期望公式，
+${\rm E}(\theta_I) = {\rm E}({\rm E}(g(U)|I=i)) = {\rm E}(g(U)) = \theta$。
+
+$\forall \epsilon > 0$，$\exists \delta > 0$ s.t. $|g(x) - g(y)| < \epsilon \ \forall |x-y| < \delta$。
+因此$b_i - a_i<\delta$时，$|\theta_i - g(a_i)| < \epsilon$，$|\theta_i - \theta| < |g(a_i)-\theta| + \epsilon$。
+
+由$a_i$的定义，
+$\frac{1}{k}\sum_{i=1}^k(g(a_i)-\theta)^2 \rightarrow {\rm Var}(g(U))$，
+从而${\rm Var}(\theta_I)\rightarrow {\rm Var}(g(U))$。
+而${\rm Var}(\hat\theta^M)\rightarrow {\rm Var}(g(U))$，
+因此${\rm Var}(\hat{\theta}^S)/{\rm Var}(\hat{\theta}^M)\rightarrow 0$。
+
+---
+
+## Exercise 5.13
+
+找到两个支撑在$(1,\infty)$上，且“接近”
+$$
+g(x) = \frac{x^2}{\sqrt{2\pi}}e^{-x^2/2}1_{\{x>1\}}
+$$
+的重要性函数$f_1$与$f_2$。
+假设要使用重要性采样来估计$\int_1^\infty g(x){\rm d}x$，
+指出并解释使用哪个$f$的方差更小。
+
+---
+
+### 解答
+
+取$f_1(x) = \frac{2}{\sqrt{2\pi}}e^{-(x-1)^2/2}$，$f_2(x) = e^{-x+1}$。
+$g,f_1,f_2$的图像如下：
+
+```{r}
+x <- seq(1, 10, 0.01)
+g <- x^2 * exp(-x^2/2) / sqrt(2*pi)
+f1 <- 2*exp(-(x-1)^2/2) / sqrt(2*pi)
+f2 <- exp(-x+1)
+plot(x, g, type = "l", ylim = c(0, 1))
+lines(x, f1, lty = 2)
+lines(x, f2, lty = 3)
+legend(
+  "topright",
+  legend = c("g", "f1", "f2"), lty = 1:3
+)
+```
+
+$g/f$越接近常数，模拟得到估计的方差就越小。
+
+下图为$g/f_i$的图像：
+
+```{r}
+plot(x, g/f1, type = "l",
+     ylim = c(0, 0.6), lty = 2, ylab = "")
+lines(x, g/f2, lty = 3)
+legend(
+  "topright",
+  legend = c("g/f1", "g/f2"), lty = 2:3
+)
+```
+
+$g/f_1$更接近常数，因此方差可能更小。
+
+---
+
+## Exercise 5.14
+
+使用重要性采样法来估计5.13中的$\int_1^\infty g(x){\rm d}x$。
+
+### 解答
+
+取$f$为5.13中的$f_1$。
+
+```{r}
+set.seed(123)
+
+m <- 1e4
+num.rep <- 1e3
+mc <- numeric(num.rep)
+
+for(i in 1:num.rep){
+  x <- abs(rnorm(m, 0, 1)) + 1
+  g <- x^2 * exp(-x^2/2) / sqrt(2*pi)
+  f <- 2*exp(-(x-1)^2/2) / sqrt(2*pi)
+  
+  mc[i] <- mean(g/f)
+}
+
+c(mean(mc), var(mc))
+```
+对比实际值：
+```{r}
+g <- function(x) x^2 * exp(-x^2/2) / sqrt(2*pi)
+integrate(g, lower = 1, upper = Inf)
+```
+两者非常接近。
+
+---
+
+## Exercise 5.15
+
+实现例5.13中的分层重要性采样法，并与例5.10做对比。
+要估计的量为
+
+$$
+\int_0^1 \frac{e^x}{1+x^2}{\rm d}x.
+$$
+
+---
+
+### 解答
+
+代码如下，输出估计及其方差：
+```{r}
+set.seed(123)
+
+M <- 1e4; k <- 5
+xx <- seq(0, 1, 1/k)
+
+theta.hat <- theta.var <- numeric(k)
+for(i in 1:k){
+  u <- runif(M/k, min = xx[i], max = xx[i+1])
+  x <- -log(1 - (1 - exp(-1)) * u)
+  
+  f <- (k/(1-exp(-1))) * exp(-x)
+  g <- exp(-x) / (1+x^2)
+  theta.hat[i] <- mean(g/f)
+  theta.var[i] <- var(g/f)
+}
+
+c(sum(theta.hat), mean(theta.var))
+```
+
+标准误差为
+
+```{r}
+sqrt(mean(theta.var))
+```
+
+相比5.10中的各结果都要小得多。
+
+---
+
+## Exercise 6.5
+
+假设使用$95\%$的$t$区间来估计非正态数据的均值，
+则此区间包含均值的概率不一定为$95\%$。
+使用MC来估计此区间包含样本量为$20$的$\chi^2(2)$数据的均值的概率，
+并与例6.6做对比。
+
+---
+
+### 解答
+
+```{r}
+set.seed(123)
+
+num.rep <- 1e4; n <- 20
+t0 <- qt(c(0.05/2, 1 - 0.05/2), df = n-1)
+
+tt <- matrix(NA, nrow = num.rep, ncol = 2)
+for(i in 1:num.rep){
+  x <- rchisq(n, df = 2)
+  tt[i, ] <- mean(x) + t0 * sd(x) / sqrt(n)
+}
+
+mean(tt[,1] < 2 & tt[,2] > 2)
+```
+
+远高于例6.6中的包含概率$77.3\%$。
+
+## Exercise 6.A
+
+使用MC模拟来探究：当样本非正态时，$t$-检验的经验第一类错误是否接近名义检验水准$\alpha$。
+讨论以下三种样本：
+(i) $\chi^2(1)$，(ii) $U(0,2)$，(iii) ${\rm Exp}(1)$。
+检验$H_0: \mu = \mu_0$对$H_1:\mu\neq \mu_0$。
+
+---
+
+### 解答
+
+生成样本：
+
+```{r, eval=FALSE}
+# 1: chi方 2: 均匀 3: 指数
+samp.generate <- function(num.rep, size){
+  samp <- array(NA, dim = c(num.rep, size, 3))
+  for(i in 1:num.rep){
+    samp[i, , 1] <- rchisq(size, df = 1)
+    samp[i, , 2] <- runif(size, min = 0, max = 2)
+    samp[i, , 3] <- rexp(size, rate = 1)
+  }
+  saveRDS(samp, file = "samp.rds")
+}
+```
+
+样本分析：
+
+```{r, eval=FALSE}
+samp.analysis <- function(filename, alpha){
+  samp <- readRDS(filename)
+  num.rep <- dim(samp)[1]; size <- dim(samp)[2]
+  
+  t0 <- qt(c(alpha/2, 1 - alpha/2), df = size-1)
+  tt <- array(NA, dim = c(num.rep, 2, 3))
+  
+  for(i in 1:3) for(j in 1:num.rep){
+    x <- samp[j, , i]
+    tt[j, , i] <- mean(x) + t0 * sd(x) / sqrt(size)
+  }
+  saveRDS(tt, file = paste(alpha, "interval.rds", sep = " "))
+}
+```
+
+结果整理：
+
+```{r, eval=FALSE}
+samp.res <- function(filename){
+  tt <- readRDS(filename)
+  num.rep <- dim(tt)[1]
+  is.in <- matrix(NA, nrow = num.rep, ncol = 3)
+  for(i in 1:3) 
+    for(j in 1:num.rep){
+      is.in[j, i] <- tt[j, 1, i] < 1 & tt[j ,2, i] > 1
+    }
+  res <- c(1 - mean(is.in[,1]), 1 - mean(is.in[,2]), 1 - mean(is.in[,3]))
+  saveRDS(res, file = "result.rds")
+}
+```
+
+---
+
+分析结果如下。
+
+$\alpha = 0.05$，各组经验第一类错误为
+
+```{r}
+rm(list = ls())
+set.seed(123)
+# 每次调用函数之前会清理所有内存。调用函数的代码已省略。
+```
+
+```{r, echo=FALSE}
+samp.generate <- function(num.rep, size){
+  samp <- array(NA, dim = c(num.rep, size, 3))
+  for(i in 1:num.rep){
+    samp[i, , 1] <- rchisq(size, df = 1)
+    samp[i, , 2] <- runif(size, min = 0, max = 2)
+    samp[i, , 3] <- rexp(size, rate = 1)
+  }
+  saveRDS(samp, file = "samp.rds")
+}
+```
+
+```{r}
+samp.generate(num.rep = 1e4, size = 1000)
+
+```
+```{r}
+rm(list = ls())
+```
+
+```{r, echo=FALSE}
+samp.analysis <- function(filename, alpha){
+  samp <- readRDS(filename)
+  num.rep <- dim(samp)[1]; size <- dim(samp)[2]
+  
+  t0 <- qt(c(alpha/2, 1 - alpha/2), df = size-1)
+  tt <- array(NA, dim = c(num.rep, 2, 3))
+  
+  for(i in 1:3) for(j in 1:num.rep){
+    x <- samp[j, , i]
+    tt[j, , i] <- mean(x) + t0 * sd(x) / sqrt(size)
+  }
+  saveRDS(tt, file = paste(alpha, "interval.rds", sep = " "))
+}
+```
+
+```{r}
+samp.analysis("samp.rds", alpha = 0.05)
+
+rm(list = ls())
+```
+
+```{r, echo=FALSE}
+samp.res <- function(filename){
+  tt <- readRDS(filename)
+  num.rep <- dim(tt)[1]
+  is.in <- matrix(NA, nrow = num.rep, ncol = 3)
+  for(i in 1:3) 
+    for(j in 1:num.rep){
+      is.in[j, i] <- tt[j, 1, i] < 1 & tt[j ,2, i] > 1
+    }
+  res <- c(1 - mean(is.in[,1]), 1 - mean(is.in[,2]), 1 - mean(is.in[,3]))
+  saveRDS(res, file = "result.rds")
+}
+```
+
+```{r}
+samp.res("0.05 interval.rds")
+
+##每个函数相互独立，只需要读取前一函数生成的文件。
+
+result <- readRDS("result.rds")
+result
+```
+
+与$\alpha$非常接近。
+
+再取$\alpha = 0.1$，结果如下：
+
+```{r, echo=FALSE}
+samp.analysis <- function(filename, alpha){
+  samp <- readRDS(filename)
+  num.rep <- dim(samp)[1]; size <- dim(samp)[2]
+  
+  t0 <- qt(c(alpha/2, 1 - alpha/2), df = size-1)
+  tt <- array(NA, dim = c(num.rep, 2, 3))
+  
+  for(i in 1:3) for(j in 1:num.rep){
+    x <- samp[j, , i]
+    tt[j, , i] <- mean(x) + t0 * sd(x) / sqrt(size)
+  }
+  saveRDS(tt, file = paste(alpha, "interval.rds", sep = " "))
+}
+
+
+samp.analysis("samp.rds", alpha = 0.1)
+samp.res("0.1 interval.rds")
+result <- readRDS("result.rds")
+result
+```
+
+结果同样与$\alpha$非常接近。
+
+---
+
+
+
+# HW4
+
+
+## 作业1
+
+考虑 $m = 1000$ 个假设，
+其中前 $95\%$ 原假设成立，
+后 $5\%$ 对立假设成立。
+原假设下 $p$ 值服从 $U(0,1)$ ，
+对立假设下 $p$ 值服从 ${\rm Beta}(0.1,1)$ 。
+将 Bonferroni 校正与 B-H 校正应用于生成的 $m$ 个独立 $p$ 值，
+得到校正后的 $p$ 值，与 $\alpha = 0.1$ 比较确定是否拒绝原假设。
+基于 $M=1000$ 次模拟，可估计 ${\rm FWER, FDR, TPR}$ 。
+
+---
+
+### 解答
+
+```{r}
+#
+# bon: bonferroni bh: Benjamini-Hochberg
+#
+set.seed(123)
+m <- 1000; M <- 1000
+
+bon.fwer <- bh.fwer <- numeric(M)
+bon.fdr <- bh.fdr <- numeric(M)
+bon.tpr <- bh.tpr <- numeric(M)
+
+for(i in 1:M){
+  p <- c(runif(0.95 * m), rbeta(0.05 * m, 0.1, 1))
+  
+  p.bon <- p.adjust(p, method = "bonferroni")
+  ord <- order(p)
+  p.bh <- p.adjust(p[ord], method = "fdr")
+  p.bh[ord] <- p.bh
+  
+  bon.fwer[i] <- sum(head(p.bon, 0.95 * m) < 0.1) > 0
+  bh.fwer[i] <- sum(head(p.bh, 0.95 * m) < 0.1) > 0
+  
+  bon.fdr[i] <- sum(head(p.bon, 0.95 * m) < 0.1) / sum(p.bon < 0.1)
+  bh.fdr[i] <- sum(head(p.bh, 0.95 * m) < 0.1) / sum(p.bh < 0.1)
+  
+  bon.tpr[i] <- mean(tail(p.bon, 0.05 * m) < 0.1)
+  bh.tpr[i] <- mean(tail(p.bh, 0.05 * m) < 0.1)
+}
+
+result <- matrix(NA, nrow = 2, ncol = 4)
+result[1,] <- c("Bonferroni", round(c(mean(bon.fwer), mean(bon.fdr), mean(bon.tpr)), 5))
+result[2,] <- c("B-H", round(c(mean(bh.fwer), mean(bh.fdr), mean(bh.tpr)), 5))
+colnames(result) <- c("method", "FWER", "FDR", "TPR")
+
+
+knitr::kable(result, align = "c")
+```
+
+使用 Bonferroni 方法得到的 ${\rm FWER}$ 很接近 $0.1$ ， ${\rm FDR}$ 则远小于 $0.1$ 。
+
+使用 B-H 方法得到的 ${\rm FWER}$ 远大于 $0.1$ ， ${\rm FDR}$ 很接近 $0.1$ 。 
+${\rm TPR}$ 略高于 Bonferroni 。
+
+
+
+---
+
+## 作业2
+
+假设总体服从 ${\rm Exp}(\lambda)$ ，
+则 $\lambda$ 的 ${\rm MLE}$ 为 $\hat\lambda = 1/\bar X$ 。
+${\rm E}\hat\lambda = \lambda n/(n-1)$ ，
+所以估计的偏差为 $\lambda/(n-1)$ 。
+标准误差为 $\lambda n/ [(n-1)\sqrt{n-2}]$ 。
+展开模拟研究来评估 Bootstrap 的效果。
+
++ $\lambda=2$ 。
++ 样本容量 $n=5,10,20$ 。
++ Bootstrap 重复次数 $B = 1000$ 。
++ 模拟重复 $m=1000$ 次。
++ 将 bootstrap 的偏差和标准误差与理论值作比较，并评价结果。
+
+---
+
+### 解答
+
+```{r}
+rm(list = ls())
+set.seed(123)
+
+lam <- 2; nn <- c(5, 10, 20)
+m <- 1000; B <- 1000
+
+result <- matrix(NA, nrow = 3, ncol = 5)
+colnames(result) <- c("size", "bias-bs", "se-bs", "bias-th", "se-th")
+result[, 1] <- nn
+
+for(i in 1:3){
+  n <- nn[i]
+  bias <- se <- numeric(m)
+  
+  for(mm in 1:m){
+    samp <- rexp(n, rate = lam)
+    
+    lam.hat <- numeric(m)
+    for(b in 1:B){
+      samp.b <- sample(samp, n, replace = TRUE)
+      lam.hat[b] <- 1 / mean(samp.b)
+    }
+    bias[mm] <- mean(lam.hat) - lam
+    se[mm] <- sd(lam.hat)
+  }
+  result[i, 2:3] <- round(c(mean(bias), mean(se)), 5)
+  result[i, 4:5] <- round(c(lam / (n-1), lam*n / (n-1) / sqrt(n-2)), 5)
+}
+
+#
+#bs: bootstrap th: 理论值
+#
+knitr::kable(result, align = "c")
+```
+
+Bootstrap 的偏差大约是理论值的 $2$ 倍。
+标准误差则在 $n$ 较大时与理论值很接近，
+在 $n$ 较小时与理论值相差较大。
+
+
+
+---
+
+## Exercise 
+
+给出例7.2中相关系数的 bootstrap $t$ 置信区间估计。
+
+---
+
+### 解答
+
+```{r}
+rm(list = ls())
+law <- bootstrap::law
+x <- law$LSAT; y <- law$GPA
+
+B <- 1000; BB <- 50 #BB: 使用bootstrap计算se的重复次数
+alpha <- 0.05
+
+set.seed(123)
+n <- length(x)
+cor.obs <- cor(x, y)
+
+t <- cor.bs <- numeric(B)
+for(b in 1:B){
+  samp <- sample(1:n, n, replace = TRUE)
+  x.samp <- x[samp]; y.samp <- y[samp]
+  cor.bs[b] <- cor(x.samp, y.samp)
+  
+  cor.rebs <- numeric(BB)
+  for(bb in 1:BB){
+    resamp <- sample(1:n, n, replace = TRUE)
+    cor.rebs[bb] <- cor(x.samp[resamp], y.samp[resamp])
+  }
+  t[b] <- (cor.bs[b] - cor.obs) / sd(cor.rebs)
+}
+
+CI <- mean(cor.bs) - quantile(t, c(1-alpha/2, alpha/2)) * sd(cor.bs)
+names(CI) <- rev(names(CI))
+
+CI
+```
+
+---
+
+
+
+# HW5
+
+
+## Exercise 7.5
+
+假设 boot 包中 aircondit 数据服从指数分布 ${\rm Exp}(\lambda)$ ，
+使用标准正态、基本、分位数与 $\rm BCa$ 方法计算 $1/\lambda$ 的 $95\%$ bootstrap 置信区间。
+比较并解释它们的区别。
+
+---
+
+### 解答
+
+对于指数分布， $1/\lambda$ 的 ${\rm MLE}$ 为 $\bar X$ 。
+
+```{r}
+rm(list = ls())
+library(boot)
+set.seed(123)
+
+f <- function(x, i) mean(x[i,])
+
+b <- boot(data = aircondit, statistic = f, R = 1000)
+CI <- boot.ci(b, conf = 0.95, type=c("norm", "basic", "perc", "bca"))
+# CI
+
+result <- matrix(NA, nrow = 4, ncol = 3)
+colnames(result) <- c("method", "lower", "upper")
+
+result[, 1] <- c("norm", "basic", "perc", "bca")
+result[1, 2:3] <- round(CI$normal[2:3], 3); result[2, 2:3] <- round(CI$basic[4:5], 3)
+result[3, 2:3] <- round(CI$perc[4:5], 3); result[4, 2:3] <- round(CI$bca[4:5], 3)
+
+knitr::kable(result, align = "c")
+```
+
+```{r}
+hist(b$t, prob = TRUE)
+abline(v = b$t0)
+```
+
+Bootstrap 得到的分布与正态分布相差较大，所以正态与分位数区间有明显区别；
+分布明显向左偏，而 $\rm BCa$ 对偏度与均值都有调整，所以置信区间更偏右。
+
+
+---
+
+## Exercise 7.8
+
+考虑 bootstrap 包中的 scor 数据集，
+令 $\theta = \lambda_1 / \sum_{i=1}^5\lambda_i$ ，
+其中 $\lambda_i$ 为相关矩阵 $R$ 的第 $i$ 大特征值。
+$\theta$ 可以使用 $R$ 的特征值来估计。
+使用 jackknife 来估计 $\hat\theta$ 的偏差与标准误差。
+
+---
+
+### 解答
+
+```{r}
+rm(list = ls())
+library(bootstrap)
+
+n <- nrow(scor)
+
+theta.est <- function(x){
+  #估计theta
+  v <- eigen(cov(x))$values
+  return(max(v) / sum(v))
+}
+
+theta.hat <- theta.est(scor)
+theta.jack <- sapply(1:n, FUN = function(i) theta.est(scor[-i, ]))
+
+bias <- (n-1) * (mean(theta.jack) - theta.hat)
+se <- sqrt(n-1) * sd(theta.jack)
+
+result <- c(theta.hat, bias, se)
+names(result) <- c("est", "bias", "se")
+result
+```
+
+
+---
+
+## Exercise 7.11
+
+在例 7.18 中，最佳模型是用留一交叉验证来选出的。
+使用留二交叉验证，并比较两个模型。
+
+---
+
+### 解答
+
+```{r}
+rm(list = ls())
+library(DAAG); attach(ironslag)
+n <- length(magnetic)
+e1 <- e2 <- e3 <- e4 <- numeric(n * (n-1) / 2)
+
+fff <- 1
+for(k in 1:(n-1)) for(l in (k+1):n){
+  y <- magnetic[-c(k, l)]
+  x <- chemical[-c(k, l)]
+  
+  J1 <- lm(y ~ x)
+  yhat1 <- J1$coef[1] + J1$coef[2] * chemical[c(k, l)]
+  e1[fff] <- sum((magnetic[c(k, l)] - yhat1)^2)
+  
+  J2 <- lm(y ~ x + I(x^2))
+  yhat2 <- J2$coef[1] + J2$coef[2] * chemical[c(k, l)] +
+    J2$coef[3] * chemical[c(k, l)]^2
+  e2[fff] <- sum((magnetic[c(k, l)] - yhat2)^2)
+  
+  J3 <- lm(log(y) ~ x)
+  logyhat3 <- J3$coef[1] + J3$coef[2] * chemical[c(k, l)]
+  yhat3 <- exp(logyhat3)
+  e3[fff] <- sum((magnetic[c(k, l)] - yhat3)^2)
+  
+  J4 <- lm(log(y) ~ log(x))
+  logyhat4 <- J4$coef[1] + J4$coef[2] * log(chemical[c(k, l)])
+  yhat4 <- exp(logyhat4)
+  e4[fff] <- sum((magnetic[c(k, l)] - yhat4)^2)
+  
+  fff <- fff + 1
+}
+
+c(mean(e1), mean(e2), mean(e3), mean(e4))
+```
+
+最佳模型也是模型 $2$ 。
+
+---
+
+
+
+# HW6
+
+
+## 课后作业
+
+证明连续情形下 Metropolis-Hastings 算法的平稳性。
+
+---
+
+### 证明
+
+$r\neq s$ 时，
+
+$$\begin{aligned}
+  K(s,r) f(s) &= \alpha(s, r) g(r|s) f(s)
+  \\&= {\rm min}\left\{ \frac{f(r)g(s|r)}{f(s)g(r|s)}, 1 \right\} g(r|s)f(s)
+  \\&= {\rm min}\left\{ f(r)g(s|r), f(s)g(r|s) \right\}
+  \\&= K(r,s)f(r).
+\end{aligned}$$
+
+$r = s$ 时，
+$K(s,r)f(s)$ 与 $K(r,s)f(r)$ 显然相等。
+平稳性得证。
+
+---
+
+## Exercise 8.1
+
+使用置换检验来实现 Cramér-von Mises 两样本等分布检验，
+并将其应用于例 8.1 和 8.2 中的数据（chickwts）。
+
+---
+
+### 解答
+
+```{r}
+rm(list = ls())
+
+cvm.test <- function(x, y){
+  m <- length(x); n <- length(y)
+  F1 <- ecdf(x); F2 <- ecdf(y)
+  w <- sum((F1(x) - F2(x))^2) + sum((F1(y) - F2(y))^2)
+  w <- m*n / (m+n)^2 * w
+  return(w)
+}
+
+cvm.perm <- function(x, y, B){
+  z <- c(x, y)
+  perm <- numeric(B + 1)
+  t0 <- cvm.test(x, y)
+  
+  m <- length(x); n <- length(y)
+  
+  for(i in 1:B){
+    xy <- sample(z)
+    x1 <- xy[1:m]; y1 <- xy[-(1:m)]
+    perm[i] <- cvm.test(x1, y1)
+  }
+  perm[B + 1] <- t0
+  
+  p <- mean(perm >= t0)
+  return(list(t0 = t0, perm = perm, p = p))
+}
+```
+
+---
+
+```{r}
+B <- 999
+attach(chickwts)
+x1 <- as.vector(weight[feed == "soybean"])
+x2 <- as.vector(weight[feed == "linseed"])
+x3 <- as.vector(weight[feed == "sunflower"])
+detach(chickwts)
+
+set.seed(123)
+
+s1 <- cvm.perm(x1, x2, B)
+s2 <- cvm.perm(x2, x3, B)
+```
+
+---
+
+```{r}
+s1$p
+```
+
+CvM 检验下，大豆与亚麻籽差异的 $p$ 值并不显著。
+
+---
+
+```{r}
+s2$p
+```
+
+CvM 检验下，向日葵与亚麻籽差异的 $p$ 值很显著。
+
+---
+
+## Exercise 8.3
+
+Count 5 等方差检验是基于最大极值点数的。
+例 6.15 显示 Count 5 准则不能应用于容量不相等的两样本。
+样本容量未必相等时，
+基于最大极值点数，
+使用置换检验来实现等方差检验。
+
+---
+
+### 解答
+
+```{r}
+max.ext <- function(x, y){
+  x <- x - mean(x); y <- y - mean(y)
+  mx <- sum(x > max(y)) + sum(x < min(y))
+  my <- sum(y > max(x)) + sum(y < min(x))
+  return(max(c(mx, my)))
+}
+
+max.ext.perm <- function(x, y, B){
+  m <- length(x); n <- length(y)
+  s0 <- max.ext(x, y)
+  z <- c(x, y)
+  
+  perm <- numeric(B + 1)
+  
+  for(i in 1:B){
+    xy <- sample(z)
+    x1 <- xy[1:m]; y1 <- xy[-(1:m)]
+    perm[i] <- max.ext(x1, y1)
+  }
+  perm[B + 1] <- s0
+  
+  p <- mean(perm >= s0)
+  
+  return(list(s0 = s0, perm = perm, p = p))
+}
+```
+
+---
+
+```{r}
+set.seed(123)
+
+x <- rnorm(50)
+y <- rnorm(100)
+
+res1 <- max.ext.perm(x, y, 999)
+res1$p
+```
+
+两样本的容量不同，方差相同，检验得到的 $p$ 值不显著。
+
+---
+
+```{r}
+set.seed(456)
+
+x <- rnorm(50)
+y <- rnorm(100, sd = 2)
+
+res2 <- max.ext.perm(x, y, 999)
+res2$p
+```
+
+两样本的容量不同，方差不同，检验得到的 $p$ 值很显著。
+
+---
+
+
+
+# HW7
+
+
+## 课后作业
+
+考虑模型
+
+$$
+{\rm P}(Y = 1| X_1,X_2,X_3) = \frac{\exp(a+ b_1X_1 + b_2X_2 + b_3X_3)}{1 + \exp(a+ b_1X_1 + b_2X_2 + b_3X_3)},
+$$
+
+其中 $X_1\sim {\rm Poisson}(1), X_2 \sim {\rm Exp}(1), X_3 \sim {\rm Binom}(1,0.5)$ 。
+
++ 设计一个函数，输入 $N, b_1, b_2, b_3$ 与 $f_0$ ，输出 $a$ 。
++ 调用此函数，输入为 $N = 10^6, b_1 = 0, b_2 = 1, b_3 = -1, f_0 = 0.1, 0.01, 0.001, 0.0001$ 。
++ 画出 $\log f_0$ vs $a$ 。
+
+---
+
+### 解答
+
+```{r}
+rm(list = ls())
+
+a.compute <- function(N, b, f0){
+  X1 <- rpois(N, lambda = 1); X2 <- rexp(N); X3 <- rbinom(N, 1, 0.5)
+  
+  g <- function(a){
+    tt <- exp(- a - b[1] * X1 - b[2] * X2 - b[3] * X3)
+    return(mean(1 / (1 + tt)) - f0)
+  }
+  solution <- uniroot(g,c(-20,0))
+  return(solution)
+}
+```
+
+```{r}
+set.seed(123)
+f0 <- c(0.1, 0.01, 0.001, 0.0001)
+N <- 1e6; b <- c(0, 2, -1)
+
+res <- lapply(f0, a.compute, N = N, b = b)
+
+a <- sapply(res, function(u) u$root)
+result <- rbind(f0 = f0, a = a)
+knitr::kable(result, align = "c")
+```
+
+```{r}
+plot(log(f0), a)
+```
+
+$a$ 与 $\log f_0$ 大致成线性关系。
+
+---
+
+## Exercise 9.4
+
+实现一个生成标准 Laplace 分布的随机游走 Metropolis 采样子，
+从正态分布模拟增量。
+比较不同方差下的提议分布生成的链，
+并计算每条链的接受率。
+
+---
+
+### 解答
+
+对于 Laplace 分布与 Metropolis 采样子，
+$\alpha(x_i, y) = e^{-|y|} / e^{-|x_i|} = e^{|x_i| - |y|}$ 。
+
+```{r}
+rm(list = ls())
+
+mh.Laplace <- function(N, x0, sigma){
+  #N: 链长度| x0: 初值| sigma: 正态分布标准差
+  x <- numeric(N + 1); x[1] <- x0
+  u <- runif(N)
+  num.acc <- 0
+  
+  for(i in 2:(N+1)){
+    y <- rnorm(1, x[i-1], sigma)
+    if(u[i-1] <= exp(abs(x[i-1]) - abs(y))){
+      x[i] <- y
+      num.acc <- num.acc + 1
+    }else x[i] <- x[i-1]
+  }
+  
+  return(list(chain = x, num.acc = num.acc))
+}
+```
+
+---
+
+```{r}
+set.seed(123)
+N <- 5000; x0 <- rnorm(1)
+sigma <- sqrt(c(0.1, 0.5, 1, 2, 4, 16))
+
+res <- lapply(sigma, mh.Laplace, N = N, x0 = x0)
+accept.rate <- sapply(1:6, function(i) res[[i]]$num.acc / N)
+
+result <- rbind(var = sigma^2, accept.rate)
+knitr::kable(result, align = "c")
+```
+
+方差越大，接受率就越小。
+
+---
+
+```{r}
+par(mfrow = c(2, 3))
+for(i in 1:6) plot(
+    res[[i]]$chain, ylab = "", type = "l",
+    xlab = paste("var = ", (sigma^2)[i])
+  )
+```
+
+---
+
+
+
+# HW8
+
+
+## 课后习题
+
+设 $X_1,...,X_n \sim {\rm Exp}(\lambda)$ 。
+出于某种原因，只知道 $X_i$ 落在某个区间 $(u_i, v_i)$ 内，
+其中 $u_i<v_i$ 是非随机已知常数。
+这种数据被称为区间删失数据。
+
+(1) 试直接最大化观测数据的似然函数与使用 EM 算法来求解 $\lambda$ 的 $\rm MLE$ 。
+证明 EM 算法收敛于观测数据的 $\rm MLE$ ，且收敛有线性速度。
+
+(2) 设 $(u_i,v_i)$ 为
+$(11,12), (8,9), (27,28), (13,14), (16,17), (0,1), (23,24), (10,11), (24,25), (2,3)$ 。
+试分别编程实现上述两种算法，以得到 $\lambda$ 的 $\rm MLE$ 的数值解。
+
+---
+
+### 解答
+
+观测数据的似然函数为
+
+$$\begin{aligned}
+  L(\lambda; X^{(o)}) 
+  &= \prod_{i=1}^n {\rm P}_\lambda(u_i\leq X_i \leq v_i)
+  \\ &= \prod_{i=1}^n (e^{-\lambda u_i} - e^{-\lambda v_i}).
+\end{aligned}$$
+
+因此 $\rm MLE$ 满足
+
+$$
+\sum_{i=1}^n \frac{u_i e^{-\lambda u_i} - v_i e^{-\lambda v_i}}{e^{-\lambda u_i} - e^{-\lambda v_i}} = 0.
+$$
+
+难以直接求解，可以数值求解。
+
+---
+
+给定完整数据 $X^{(o)}, X^{(m)}$ ，
+
+$$\begin{aligned}
+  I_k(\lambda;X^{(o)})
+  &= {\rm E}_{\lambda_k} \left[\log L(\lambda; X^{(o)}, X^{(m)}) \big| X^{(o)}\right]
+  \\&= \sum_{i=1}^n \int_{u_1}^{v_1}\cdots \int_{u_n}^{v_n} \log(\lambda e^{-\lambda x_i})\lambda_k^n e^{-\lambda_k (x_1+...+x_n)} {\rm d} x_n \cdots {\rm d}x_1
+  \\&= \prod_{i=1}^n(e^{-\lambda_k u_i} - e^{-\lambda_k v_i}) \cdot 
+        \sum_{i=1}^n \frac{(e^{-\lambda_k u_i} - e^{-\lambda_k v_i})\log\lambda - \lambda \left((1/\lambda_k + u_i)e^{-\lambda_k u_i}  - (1/\lambda_k + v_i)e^{-\lambda_k v_i}\right)}{(e^{-\lambda_k u_i} - e^{-\lambda_k v_i})},
+\end{aligned}$$
+
+最大化后得到
+
+$$
+\lambda_{k+1} = 
+\left(\frac{1}{\lambda_k} + \frac{1}{n}\sum_{i=1}^n \frac{u_i e^{-\lambda_k u_i} - v_i e^{-\lambda_k v_i}}{e^{-\lambda_k u_i} - e^{-\lambda_k v_i}}\right)^{-1}.
+$$
+
+---
+
+如果 $\lambda_k$ 收敛到 $\hat\lambda$ ，则
+
+$$
+\sum_{i=1}^n \frac{u_i e^{-\hat\lambda u_i} - v_i e^{-\hat\lambda v_i}}{e^{-\hat\lambda u_i} - e^{-\hat\lambda v_i}} = 0.
+$$
+$\hat\lambda$ 就是 $\lambda$ 的 $\rm MLE$ 。
+
+---
+
+令
+$$
+f(\lambda) = \left(\frac{1}{\lambda} + \frac{1}{n}\sum_{i=1}^n \frac{u_i e^{-\lambda u_i} - v_i e^{-\lambda v_i}}{e^{-\lambda u_i} - e^{-\lambda v_i}}\right)^{-1},
+$$
+
+则 $f$ 单调递增。
+$f(\infty) = n / \sum u_i, f(0) = 0$ ，即 $f((0,\infty)) \subset (0, \infty)$ 。
+$\exists\ 0 < \alpha < 1$ s.t. $f'(\lambda) < \alpha$ ，
+$f$ 是 $(0, \infty)$ 上的压缩映射。
+因此 $f$ 一定有不动点，且 $\lambda_k$ 收敛到此不动点。
+
+---
+
+由
+
+$$
+\frac{1}{\lambda_{k+1}} - \frac{1}{\hat\lambda} = \frac{1}{\lambda_k} - \frac{1}{\hat\lambda} + \frac{1}{n}\sum_{i=1}^n \frac{u_i e^{-\lambda_k u_i} - v_i e^{-\lambda_k v_i}}{e^{-\lambda_k u_i} - e^{-\lambda_k v_i}}
+$$
+
+知
+
+$$
+\frac{\lambda_{k+1} - \hat\lambda}{\lambda_k - \hat\lambda} =
+-1 + \frac{\lambda_{k+1}\hat\lambda}{n\lambda_k} \frac{1}{\hat\lambda} \cdot \frac{1}{\lambda_k - \hat\lambda}\sum_{i=1}^n \frac{u_i e^{-\lambda_k u_i} - v_i e^{-\lambda_k v_i}}{e^{-\lambda_k u_i} - e^{-\lambda_k v_i}}.
+$$
+而
+
+$$
+\frac{1}{\lambda_k - \hat\lambda}\sum_{i=1}^n \frac{u_i e^{-\lambda_k u_i} - v_i e^{-\lambda_k v_i}}{e^{-\lambda_k u_i} - e^{-\lambda_k v_i}}
+$$
+
+的极限为
+
+$$
+-\frac{1}{\hat\lambda}\sum_{i=1}^n\frac{u_i^2e^{-\hat\lambda u_i} - v_i^2e^{-\hat\lambda v_i}}{e^{-\hat\lambda u_i} - e^{-\hat\lambda v_i}} > 0,
+$$
+因此 $\frac{|\lambda_{k+1} - \hat\lambda|}{|\lambda_k - \hat\lambda|}$ 的极限 $< 1$ ，
+$\lambda_k$ 线性收敛。
+
+---
+
+EM 算法：
+
+```{r}
+lam.update <- function(lam, u, v){
+  uu <- exp(-lam * u) - exp(-lam * v)
+  ll <- u * exp(-lam * u) - v * exp(-lam * v)
+  
+  ss <- 1 / lam + mean(ll / uu)
+  
+  return(1 / ss)
+}
+
+lam.em <- function(init, u, v, tol = 1e-5){
+  est.old <- init
+  est <- lam.update(init, u, v)
+  
+  while(abs(est.old - est) > tol){
+    est.old <- est
+    est <- lam.update(est, u, v)
+  }
+  return(est)
+}
+
+#(11,12), (8,9), (27,28), (13,14), (16,17), (0,1), (23,24), (10,11), (24,25), (2,3)
+u <- c(11, 8, 27, 13, 16, 0, 23, 10, 24, 2)
+v <- c(12, 9, 28, 14, 17, 1, 24, 11, 25, 3)
+
+MLE1 <- lam.em(1, u, v)
+MLE1
+```
+
+直接求解：
+
+```{r}
+f <- function(lam, u, v){
+  s <- u * exp(-lam * u) - v * exp(-lam *v)
+  t <- exp(-lam * u) - exp(-lam *v)
+  return(sum(s / t))
+}
+
+MLE2 <- uniroot(f, c(1e-3, 1), u = u, v = v, tol = 1e-5)
+MLE2$root
+```
+
+两种方法的结果一致。
+
+---
+
+## Exercise 11.8
+
+在 Morra 博弈中，如果收益矩阵的每个元素都减去相同的常数，
+或者乘上相同的正常数，则最优策略不变。
+但是， simplex 算法可能会在不同的基本可行点（也是最优）停止。
+计算 B <- A + 2 ，找到博弈 B 的解，
+并验证它是 A 的极值点 (11.12) - (11.15) 之一。
+计算 A 和 B 的价值。
+
+---
+
+### 解答
+
+```{r}
+solve.game <- function(A){
+  min.A <- min(A)
+  A <- A - min.A
+  max.A <- max(A)
+  A <- A / max(A)
+  m <- nrow(A)
+  n <- ncol(A)
+  it <- n^3
+  a <- c(rep(0, m), 1)
+  A1 <- -cbind(t(A), rep(-1, n))
+  b1 <- rep(0, n)
+  A3 <- t(as.matrix(c(rep(1, m), 0)))
+  b3 <- 1
+  sx <- simplex(a=a, A1=A1, b1=b1, A3=A3, b3=b3,
+      maxi=TRUE, n.iter=it)
+  a <- c(rep(0, n), 1)
+  A1 <- cbind(A, rep(-1, m))
+  b1 <- rep(0, m)
+  A3 <- t(as.matrix(c(rep(1, n), 0)))
+  b3 <- 1
+  sy <- simplex(a=a, A1=A1, b1=b1, A3=A3, b3=b3,
+  maxi=FALSE, n.iter=it)
+  soln <- list("A" = A * max.A + min.A,
+  "x" = sx$soln[1:m],
+  "y" = sy$soln[1:n],
+  "v" = sx$soln[m+1] * max.A + min.A)
+  soln
+}
+
+A <- matrix(c(
+  0,-2,-2,3,0,0,4,0,0,
+  2,0,0,0,-3,-3,4,0,0,
+  2,0,0,3,0,0,0,-4,-4,
+  -3,0,-3,0,4,0,0,5,0,
+  0,3,0,-4,0,-4,0,5,0,
+  0,3,0,0,4,0,-5,0,-5,
+  -4,-4,0,0,0,5,0,0,6,
+  0,0,4,-5,-5,0,0,0,6,
+  0,0,4,0,0,5,-6,-6,0), 9, 9)
+
+library(boot)
+B <- A + 2
+s <- solve.game(B)
+```
+
+```{r}
+round(cbind(s$x, s$y), 5)
+```
+
+simplex 算法在极值点 (11.15) 处停止了。
+
+```{r}
+s$v
+```
+
+B 的价值为 $2$ ，A 的价值为 $0$ 。
+
+---
+
+
+
+# HW9
+
+
+## 2.1.3 Exercise 4
+
+为什么要使用 $\texttt{unlist()}$ 来将列表转换为原子向量，
+$\texttt{as.vector()}$ 不行？
+
+---
+
+### 解答
+
+因为列表也属于向量， $\texttt{as.vector()}$ 不会改变结果。
+所以需要使用 $\texttt{unlist()}$ 。
+
+---
+
+## 2.3.1 Exercise 1
+
+$\texttt{dim()}$ 作用于向量后，会返回什么？
+
+---
+
+### 解答
+
+会返回 $\texttt{NULL}$ 。
+
+```{r}
+a <- c(1, 2, 3)
+dim(a)
+```
+
+
+---
+
+## 2.3.2 Exercise 2
+
+如果 $\texttt{is.matrix(x)}$ 是 $\texttt{TRUE}$ ，
+$\texttt{is.array(x)}$ 会返回什么？
+
+---
+
+### 解答
+
+也返回 $\texttt{TRUE}$ 。
+
+```{r}
+x <- matrix(0, 2, 2)
+c(is.matrix(x), is.array(x))
+```
+
+---
+
+## 2.4.5 Exercise 2
+
+$\texttt{as.matrix()}$ 作用于各列类型不同的 data frame ，
+会发生什么？
+
+---
+
+### 解答
+
+如果各列是不同精度的数值，则会将每个元素转换为当前最高精度。
+
+如果是数值与字符混合，则转换为字符。
+
+如果某列含列表，则转换为列表。
+
+---
+
+## 2.4.5 Exercise 3
+
+data frame 能不能只有 $0$ 行？列？
+
+---
+
+### 解答
+
+都可以。
+
+```{r}
+m <- matrix(0, 2, 2)
+m <- m[FALSE, FALSE]
+m
+```
+
+
+---
+
+## 11.1.2 Exercises 2
+
+以下函数能把向量缩放至范围在 $[0,1]$ 内。
+
+```{r}
+scale01 <- function(x) {
+  rng <- range(x, na.rm = TRUE)
+  (x - rng[1]) / (rng[2] - rng[1])
+}
+```
+
+如何将其作用于 data frame 的每一列？
+作用于 data frame 的每一数值列？
+
+---
+
+### 解答
+
+```{r}
+x <- as.data.frame(matrix(rnorm(9), 3, 3)); x
+y <- apply(x, 2, scale01); y
+```
+
+---
+
+```{r}
+x <- cbind(x, s = c("a", "b", "c")); x
+y <- apply(x, 2, function(u) if(is.numeric(u)) scale01(u) else u); y
+```
+
+
+---
+
+## 11.2.5 Exercise 1
+
+使用 $\texttt{vapply()}$ 来：
+
++ a) 计算数值 data frame 每一列的标准差。
++ b) 计算混合 data frame 每一数值列的标准误差。
+
+---
+
+### 解答
+
+a)
+
+```{r}
+x <- as.data.frame(matrix(rnorm(9), 3, 3)); x
+y <- vapply(x, sd, numeric(1)); y
+```
+
+---
+
+b)
+
+```{r}
+x <- cbind(x, s = c("a", "b", "c")); x
+y <- vapply(
+  x[vapply(x, is.numeric, logical(1))],
+  sd, numeric(1)
+)
+y
+```
+
+---
+
+## Exercise 9.8
+
+考虑二元密度
+
+$$
+f(x, y) \propto \binom{n}{x} y^{x+a-1}(1-y)^{n-x+b-1}, \ x=0,1,...,n, \ 0\leq y\leq 1.
+$$
+
+固定 $a, b, n$ ，条件分布为 ${\rm Binom}(n,y)$ 与 ${\rm Beta}(x+a, n-x+b)$ 。
+使用 Gibbs 采样来逼近此密度。
+
++ 编写一个 R 函数
++ 编写一个 Rcpp 函数
++ 使用函数 $\texttt{microbenchmark}$ 来比较两个函数的计算时间。
+
+---
+
+### 解答
+
+R 函数：
+
+```{r}
+gibbs_r <- function(a, b, n, N){
+  X <- matrix(0, N, 2)
+  
+  for(i in 2:N){
+    X[i, 1] <- rbinom(1, n, X[i-1, 2])
+    X[i, 2] <- rbeta(1, X[i, 1] + a, n - X[i, 1] + b)
+  }
+  
+  colnames(X) <- c("x", "y")
+  return(X)
+}
+```
+
+---
+
+Rcpp 函数：
+
+```{r}
+library(Rcpp)
+
+cppFunction('
+NumericMatrix gibbs_rcpp(double a, double b, int n, int N){
+  NumericMatrix X(N, 2);
+  
+  for(int i = 1; i < N; i++){
+    X(i, 0) = R::rbinom(n, X(i-1, 1));
+    X(i, 1) = R::rbeta(X(i, 0) + a, n - X(i, 0) + b);
+  }
+  
+  return X;
+}     
+')
+```
+
+---
+
+计算时间对比：
+
+```{r}
+library(microbenchmark)
+a <- 3; b <- 4; n <- 20; N <- 1e4
+
+microbenchmark(gibbs_r(a, b, n, N), gibbs_rcpp(a, b, n, N))
+```
+
+Rcpp 函数的效率要高得多。

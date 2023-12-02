@@ -1,0 +1,135 @@
+---
+title: "带时间变点的 Cox 模型——使用动态规划来检验变点"
+author: "BA23001021 Yulin Zhou"
+date: "2023-11-29"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{带时间变点的 Cox 模型——使用动态规划来检验变点}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+## 概述
+
+此 R 包的主要用途是：在带时间变点的 Cox 模型下，使用动态规划来检测生存数据的变点。
+
+本包主要函数为 $\texttt{dp.mcp()}$ ，
+其他函数包括 $\texttt{plik()}, \texttt{plik.1d()}, \texttt{plik.2d()}$ ，
+分别用于计算对数偏似然函数及其一、二阶导数，
+以及 $\texttt{plik.est()}$ ，使用牛顿法来计算最大偏似然估计。
+
+另外还有两个非用户水平的 __Rcpp__ 函数 $\texttt{p1d()}, \texttt{p2d()}$ ，
+是用于辅助计算一、二阶导数的。
+
+包中附带一组模拟数据，时间变点为 $3, 6$ 。
+
+此包**要求**生存数据的死亡时间不重合，且删失类型为右删失。
+
+---
+
+
+## 各函数简介
+
+$\texttt{plik()}$ 的源代码如下：
+```{r, eval=FALSE}
+plik <- function(t, delta, Z, beta){
+  Z <- cbind(Z); beta <- as.numeric(beta)
+  ord <- order(t)
+  t <- t[ord]; delta <- delta[ord]; Z <- Z[ord, , drop = FALSE]
+  
+  ss <- as.numeric(Z %*% beta)
+  ee <- exp(ss)
+  ff <- log(rev(cumsum(rev(ee))))
+  
+  return(sum(delta * (ss - ff)))
+}
+```
+
+'t' 为生存时间，'delta' 为删失指标（$0$ 为删失），'Z' 为协变量矩阵， 'beta' 为参数。
+下同。
+
+---
+
+$\texttt{plik.1d()}$ 的源代码如下：
+```{r, eval=FALSE}
+plik.1d <- function(t, delta, Z, beta){
+Z <- cbind(Z); beta <- as.numeric(beta)
+ord <- order(t)
+t <- t[ord]; delta <- delta[ord]; Z <- Z[ord, , drop = FALSE]
+
+ss <- as.numeric(Z %*% beta)
+ee <- exp(ss); ff <- rev(cumsum(rev(ee)))
+return(p1d(ee, ff, delta, Z))
+}
+```
+
+
+$\texttt{plik.2d()}$ 的源代码如下：
+```{r, eval=FALSE}
+plik.2d <- function(t, delta, Z, beta){
+  Z <- cbind(Z); beta <- as.numeric(beta)
+  ord <- order(t)
+  t <- t[ord]; delta <- delta[ord]; Z <- Z[ord, , drop = FALSE]
+  
+  ss <- as.numeric(Z %*% beta)
+  ee <- exp(ss); ff <- rev(cumsum(rev(ee)))
+  
+  return(p2d(ee, ff, delta, Z))
+}
+```
+
+$\texttt{p1d()}, \texttt{p2d()}$ 这两个 __Rcpp__ 函数的源代码较长，且不是用户水平的，此处隐去。
+
+---
+
+$\texttt{plik.est()}$ 的源代码如下：
+```{r, eval=FALSE}
+plik.est <- function(t, delta, Z, init = rep(0, NCOL(Z)), control = 1e-5){
+  x <- init
+  fx <- plik.1d(t, delta, Z, x)
+  var <- chol2inv(chol(-plik.2d(t, delta, Z, x)))
+  while(sum(abs(fx)) > control){
+    x <- x + var %*% fx
+    fx <- plik.1d(t, delta, Z, x)
+    var <- chol2inv(chol(-plik.2d(t, delta, Z, x)))
+  }
+  
+  return(list(est = as.numeric(x), var = var))
+}
+```
+
+'init' 为牛顿法的初值， 'control' 为收敛阈值。
+
+---
+
+$\texttt{dp.mcp()}$ 为本包的主要函数，但是源代码较长，就不在此展示。
+
+它的输入为 't', 'delta', 'Z' ，以及 'candid' - 变点的待选集、 'ac' 变点显著水平的阈值。
+
+输出为一列表，包含：
+'partition' - 变点划分、
+'opt' - 动态规划过程中存储的信息、
+'beta' - 每一块的参数 、
+'var' - 参数对应的方差估计。
+
+---
+
+
+## $\texttt{dp.mcp()}$ 使用展示
+
+```{r}
+library(BA23001021)
+data(simdata)
+t <- simdata$t; delta <- simdata$delta; Z <- simdata$z
+
+# 待选集为 t 的20等分点
+candid <- c(-Inf, quantile(t, seq(0.05, 0.95, 0.05)), Inf)
+
+# 使用 Bonferonni 来控制 FWER ， 1330 为 20 个点的动态规划所需的最大检验数
+ac <- 0.05 / 1330
+
+res <- dp.mcp(t, delta, Z, candid, ac)
+res$partition
+```
+
+与真实变点的位置 $3, 6$ 非常接近。
