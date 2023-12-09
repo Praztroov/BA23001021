@@ -1,0 +1,29 @@
+[
+    {
+        "file": "D:/SC_FP/BA23001021/src/coxph.cpp",
+        "file_last_write": 1701310368.0,
+        "definitions": [
+            {
+                "usr": "c:@F@p1d#$@N@Rcpp@S@Vector>#VI14#@N@Rcpp@ST>1#T@PreserveStorage#S0_#$@N@Rcpp@S@Vector>#VI13#@N@Rcpp@ST>1#T@PreserveStorage#$@N@Rcpp@S@Matrix>#VI14#@N@Rcpp@ST>1#T@PreserveStorage#",
+                "kind": 6,
+                "parent_name": "",
+                "name": "p1d(Rcpp::NumericVector, Rcpp::NumericVector, Rcpp::IntegerVector, Rcpp::NumericMatrix)",
+                "file": "D:/SC_FP/BA23001021/src/coxph.cpp",
+                "line": 5,
+                "column": 15,
+                "hidden": false
+            },
+            {
+                "usr": "c:@F@p2d#$@N@Rcpp@S@Vector>#VI14#@N@Rcpp@ST>1#T@PreserveStorage#S0_#$@N@Rcpp@S@Vector>#VI13#@N@Rcpp@ST>1#T@PreserveStorage#$@N@Rcpp@S@Matrix>#VI14#@N@Rcpp@ST>1#T@PreserveStorage#",
+                "kind": 6,
+                "parent_name": "",
+                "name": "p2d(Rcpp::NumericVector, Rcpp::NumericVector, Rcpp::IntegerVector, Rcpp::NumericMatrix)",
+                "file": "D:/SC_FP/BA23001021/src/coxph.cpp",
+                "line": 30,
+                "column": 15,
+                "hidden": false
+            }
+        ],
+        "hidden": false
+    }
+]
